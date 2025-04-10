@@ -1,5 +1,6 @@
 package it.interno.inventory.service.impl;
 
+import it.interno.common.lib.model.OrderDto;
 import it.interno.common.lib.model.ProductDto;
 import it.interno.common.lib.util.Utility;
 import it.interno.inventory.entity.Inventory;
@@ -28,18 +29,15 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Transactional
     @Override
-    public boolean verificaDisponibilitaProdotti(List<ProductDto> elencoProdotti, Integer idOrdine,
-                                                 Timestamp tsInserimentoOrdine, String idUtente) {
+    public void verificaDisponibilitaProdotti(OrderDto orderDto, String idUtente) {
 
         AtomicBoolean prodottiDisponibili = new AtomicBoolean(true);
-        if(!CollectionUtils.isEmpty(elencoProdotti)) {
-            elencoProdotti.forEach(productDto -> {
+        if(!CollectionUtils.isEmpty(orderDto.getElencoProdotti())) {
+            orderDto.getElencoProdotti().forEach(productDto -> {
                 if(prodottiDisponibili.get()) {
                     Timestamp tmspRif = Utility.getTimestamp();
-                    InventoryKey inventoryKey = new InventoryKey();
-                    inventoryKey.setIdProdotto(productDto.getIdProdotto());
-                    inventoryKey.setTsInserimento(Utility.convertStringToTimestamp(productDto.getTsInserimento()));
-                    inventoryRepository.findById(inventoryKey).ifPresentOrElse(inventory -> {
+                    inventoryRepository.findByIdProdottoAndTsInserimentoAndTsCancellazioneIsNull(
+                            productDto.getIdProdotto(), Utility.convertStringToTimestamp(productDto.getTsInserimento())).ifPresentOrElse(inventory -> {
                                 if("S".equals(inventory.getDisponibile())) {
                                     inventoryRepository.cancellazioneLogica(inventory.getIdProdotto(), tmspRif, idUtente);
 
@@ -47,8 +45,8 @@ public class InventoryServiceImpl implements InventoryService {
 
                                     entityNew.setIdUtenteInserimento(idUtente);
                                     entityNew.setDisponibile("N");
-                                    entityNew.setIdOrdine(idOrdine);
-                                    entityNew.setTsInserimentoOrdine(tsInserimentoOrdine);
+                                    entityNew.setIdOrdine(orderDto.getIdOrdine());
+                                    entityNew.setTsInserimentoOrdine(Utility.convertStringToTimestamp(orderDto.getTsInserimento()));
                                     entityNew.setTsInserimento(tmspRif);
 
                                     inventoryRepository.save(entityNew);
@@ -65,7 +63,7 @@ public class InventoryServiceImpl implements InventoryService {
             });
         }
 
-        return prodottiDisponibili.get();
+        orderDto.setIdStato(prodottiDisponibili.get() ? 8 : 6); // 8 = PRODOTTO DISPONIBILE ; 6 = PRODOTTO NON DISPONIBILE
     }
 
     @Transactional
@@ -87,8 +85,6 @@ public class InventoryServiceImpl implements InventoryService {
                         Utility.convertStringToTimestamp(productDto.getTsInserimento()));
             });
         }
-
-//        return prodottiDisponibili.get();
     }
 
 }

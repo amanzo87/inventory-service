@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.sql.Timestamp;
+import java.util.Optional;
 
 public interface InventoryRepository extends JpaRepository<Inventory, InventoryKey> {
 
@@ -29,5 +30,7 @@ public interface InventoryRepository extends JpaRepository<Inventory, InventoryK
             "     ID_PRODUCT = ?1 " +
             " AND TS_CANCELLAZIONE = ?2 ", nativeQuery = true)
     void riaperturaDisponibilitarProdotto(Integer idProduct, Timestamp tsCancellazione);
+
+    Optional<Inventory> findByIdProdottoAndTsInserimentoAndTsCancellazioneIsNull(Integer idProdotto, Timestamp tsInserimento);
 
 }
