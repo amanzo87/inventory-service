@@ -5,6 +5,7 @@ import it.interno.common.lib.model.ProductDto;
 import it.interno.common.lib.util.Utility;
 import it.interno.inventory.entity.Inventory;
 import it.interno.inventory.entity.key.InventoryKey;
+import it.interno.inventory.exception.InventoryFallbackException;
 import it.interno.inventory.repository.InventoryRepository;
 import it.interno.inventory.service.InventoryService;
 import jakarta.transaction.Transactional;
@@ -31,45 +32,51 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     public void verificaDisponibilitaProdotti(OrderDto orderDto, String idUtente) {
 
-        AtomicBoolean prodottiDisponibili = new AtomicBoolean(true);
-        if(!CollectionUtils.isEmpty(orderDto.getElencoProdotti())) {
-            orderDto.getElencoProdotti().forEach(productDto -> {
-                if(prodottiDisponibili.get()) {
-                    Timestamp tmspRif = Utility.getTimestamp();
-                    inventoryRepository.findByIdProdottoAndTsInserimentoAndTsCancellazioneIsNull(
-                            productDto.getIdProdotto(), Utility.convertStringToTimestamp(productDto.getTsInserimento())).ifPresentOrElse(inventory -> {
-                                if("S".equals(inventory.getDisponibile())) {
-                                    inventoryRepository.cancellazioneLogica(inventory.getIdProdotto(), tmspRif, idUtente);
+        try {
 
-                                    Inventory entityNew = inventory.clone();
+            AtomicBoolean prodottiDisponibili = new AtomicBoolean(true);
+            if(!CollectionUtils.isEmpty(orderDto.getElencoProdotti())) {
+                orderDto.getElencoProdotti().forEach(productDto -> {
+                    if(prodottiDisponibili.get()) {
+                        Timestamp tmspRif = Utility.getTimestamp();
+                        inventoryRepository.findByIdProdottoAndTsInserimentoAndTsCancellazioneIsNull(
+                                productDto.getIdProdotto(), Utility.convertStringToTimestamp(productDto.getTsInserimento())).ifPresentOrElse(inventory -> {
+                                    if("S".equals(inventory.getDisponibile())) {
+                                        inventoryRepository.cancellazioneLogica(inventory.getIdProdotto(), tmspRif, idUtente);
 
-                                    entityNew.setIdUtenteInserimento(idUtente);
-                                    entityNew.setDisponibile("N");
-                                    entityNew.setIdOrdine(orderDto.getIdOrdine());
-                                    entityNew.setTsInserimentoOrdine(Utility.convertStringToTimestamp(orderDto.getTsInserimento()));
-                                    entityNew.setTsInserimento(tmspRif);
+                                        Inventory entityNew = inventory.clone();
 
-                                    inventoryRepository.save(entityNew);
+                                        entityNew.setIdUtenteInserimento(idUtente);
+                                        entityNew.setDisponibile("N");
+                                        entityNew.setIdOrdine(orderDto.getIdOrdine());
+                                        entityNew.setTsInserimentoOrdine(Utility.convertStringToTimestamp(orderDto.getTsInserimento()));
+                                        entityNew.setTsInserimento(tmspRif);
 
-                                    productDto.setTsCancellazione(productDto.getTsInserimento());
-                                    productDto.setTsInserimento(Utility.convertTimestampToString(tmspRif));
-                                }else{
-                                    prodottiDisponibili.set(false);
-                                }
-                            },
-                            () -> prodottiDisponibili.set(false)
-                    );
-                }
-            });
+                                        inventoryRepository.save(entityNew);
+
+                                        productDto.setTsCancellazione(productDto.getTsInserimento());
+                                        productDto.setTsInserimento(Utility.convertTimestampToString(tmspRif));
+                                    }else{
+                                        prodottiDisponibili.set(false);
+                                    }
+                                },
+                                () -> prodottiDisponibili.set(false)
+                        );
+                    }
+                });
+            }
+
+            orderDto.setIdStato(prodottiDisponibili.get() ? 8 : 6); // 8 = PRODOTTO DISPONIBILE ; 6 = PRODOTTO NON DISPONIBILE
+
+        }catch (Exception ex) {
+            throw new InventoryFallbackException(ex.getMessage());
         }
-
-        orderDto.setIdStato(prodottiDisponibili.get() ? 8 : 6); // 8 = PRODOTTO DISPONIBILE ; 6 = PRODOTTO NON DISPONIBILE
     }
 
     @Transactional
     @Override
     public void fallimentoOrdine(List<ProductDto> elencoProdotti, Integer idOrdine, Timestamp tsInserimentoOrdine,
-                                    String idUtente) {
+                                 String idUtente) {
 
         if(!CollectionUtils.isEmpty(elencoProdotti)) {
             elencoProdotti.forEach(productDto -> {
